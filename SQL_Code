@@ -1,0 +1,158 @@
+// 🔧 Project Theme: E-commerce Analytics for Sales & Customer Insights
+
+// Use Case:
+
+// An online retail company wants to analyze its sales, customer behavior, and product performance across regions to optimize marketing, inventory, and logistics.
+
+// creation of warehouse ---- its like team working
+
+CREATE WAREHOUSE ecommerce_wh
+WITH WAREHOUSE_SIZE = 'XSMALL'
+AUTO_SUSPEND = 60
+AUTO_RESUME = TRUE;
+
+// creation of database --- its like workdesk
+
+CREATE DATABASE ecommerce1_db;
+USE DATABASE ecommerce1_db;
+
+// creation of schema ---- its like drawer of the desk 
+
+CREATE SCHEMA raw;
+USE SCHEMA raw;
+
+// table creation ----- its like folder in that drawer 
+
+create or replace table raw.inventory(
+ product_id varchar,
+ warehouse_location varchar,
+ stock_qty integer
+);
+
+//copy into raw.inventory
+//from @%inventory
+//file_format= (type = 'CSV' field_optionally_enclosed_by = '"' skip_header = 1 ); 
+
+create schema if not exists analytics;
+// Why? Segregating raw data from modeled (cleaned/transformed) data keeps your environment clean and production-grade.
+
+// Creating Star Schema Why Star Schema? Simplifies joins for BI tools and improves query performance due to fewer joins & denormalized structure.
+
+// here star schema is analytics
+
+// create dimension table 
+
+//din_customers
+
+create or replace table analytics.dim_customer as
+select distinct 
+customer_id,
+initcap(first_name) as first_name,
+initcap(last_name) as last_name,
+lower(email) as email,
+city,
+country,
+signup_date,
+from raw.customers;
+
+//dim_products
+
+create or replace table analytics.dim_product as
+select distinct
+product_id,
+initcap(product_name) as product_name,
+category,
+price
+from raw.products;
+
+// now we will create date table, its very crucial for data analytics, as it will help bi user to filter by month, quarter, year, weekdays weekends etc
+
+create or replace table analytics.dim_date as
+with dates as ( 
+select dateadd(day , seq4(), '2022-01-01') as full_date
+from table(generator(rowcount => 1000))
+)
+select
+full_date,
+extract(year from full_date) as year,
+extract(month from full_date) as month,
+extract(day from full_date) as day,
+to_char(full_date, 'day') as day_of_week,
+to_char(full_date, 'month') as month_name,
+case when dayofweek(full_date) in (1,7) then 'weekend' else 'weekday' end as day_type
+from dates;
+
+//📌 Why? dim_date gives powerful date-level reporting (weekly trends, weekend vs weekday, seasonality, etc.)
+
+// now we will create a fact table, its plays very crucial part in data modeling in BI
+
+create or replace table analytics.fact_sales AS
+select 
+oi.order_id,
+oi.product_id,
+o.customer_id,
+o.order_date,
+o.order_status,
+oi.quantity,
+oi.price,
+(oi.quantity * oi.price) as total_amount,
+from raw.orders o
+join raw.order_items oi
+on o.order_id = oi.order_id;
+
+//📌 Why? This consolidated table holds transaction-level data, ideal for computing revenue, sales volume, and linking to customers, products, and dates.
+
+
+//As we have segregated all our data from raw schema to star schema, also created fact table as well, now we will dive into actual bussiness question
+
+// “What are the top 5 selling products by quantity?”
+
+Select 
+P.product_name ,
+sum(F.QUANTITY) as total_quantity 
+from analytics.fact_sales F
+join analytics.dim_product P On p.product_id = f.product_id
+group by p.product_name
+order by total_quantity desc
+limit 5;
+
+// 📌 Interview Insight: Shows understanding of inner joins, GROUP BY, and filtering logic.
+
+// 🔹 STEP 2: Join with Multiple Dimensions (Customer + Product + Date)
+
+select
+c.first_name || '' || c.last_name as Full_name,
+p.product_name,
+d.full_date as order_date,
+f.order_id,
+f.quantity,
+f.total_amount 
+from analytics.fact_sales f
+join analytics.dim_customer c on f.customer_id = c.customer_id
+join analytics.dim_product p on f.product_id = p.product_id
+join analytics.dim_date d on f.order_date = d.full_date
+limit 10; 
+
+SELECT
+    f.order_id,
+    d.full_date AS order_date,
+    c.first_name || ' ' || c.last_name AS customer_name,
+    p.product_name,
+    f.quantity,
+    f.total_amount
+FROM analytics.fact_sales f
+JOIN analytics.dim_customer c ON f.customer_id = c.customer_id
+JOIN analytics.dim_product p ON f.product_id = p.product_id
+JOIN analytics.dim_date d ON f.order_date = d.full_date
+LIMIT 10;
+
+//📌 Why? Real-world dashboards often blend customer, product, and time dimensions. Shows you understand star schema design.
+
+// 🔹 STEP 3: Use Window Function — RANK() per Category
+
+
+
+
+
+
+
