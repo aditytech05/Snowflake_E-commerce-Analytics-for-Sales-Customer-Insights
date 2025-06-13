@@ -149,6 +149,45 @@ LIMIT 10;
 //📌 Why? Real-world dashboards often blend customer, product, and time dimensions. Shows you understand star schema design.
 
 // 🔹 STEP 3: Use Window Function — RANK() per Category
+// Business Question: “Top 3 products in each category by revenue.”
+
+select * from (
+select
+p.category,
+p.product_name,
+sum(f.total_amount) as revenue ,
+rank() over (partition by p.category order by sum(f.total_amount) desc) as ranked_product 
+from analytics.fact_sales f 
+join analytics.dim_product p on p.product_id = f.product_id 
+group by  p.category, p.product_name 
+) ranked
+where ranked_product <= 4;
+
+// 📌 Interview Relevance: Window functions (especially RANK(), ROW_NUMBER(), LAG(), LEAD()) are high-frequency interview questions.
+
+// 🔹 STEP 4: Use CASE for Customer Segmentation Business Question: “Segment customers based on total spend.”
+
+SELECT
+    c.customer_id,
+    c.first_name || ' ' || c.last_name AS customer_name,
+    SUM(f.total_amount) AS total_spend,
+    CASE 
+        WHEN SUM(f.total_amount) >= 1000 THEN 'High-Value'
+        WHEN SUM(f.total_amount) BETWEEN 500 AND 999 THEN 'Medium-Value'
+        ELSE 'Low-Value'
+    END AS customer_segment
+FROM analytics.fact_sales f
+JOIN analytics.dim_customer c ON f.customer_id = c.customer_id
+GROUP BY c.customer_id, customer_name
+ORDER BY total_spend DESC; 
+
+
+
+
+
+
+
+
 
 
 
