@@ -181,15 +181,109 @@ JOIN analytics.dim_customer c ON f.customer_id = c.customer_id
 GROUP BY c.customer_id, customer_name
 ORDER BY total_spend DESC; 
 
+// 🔹 STEP 5: Create Reusable View
+// 📌 Why? Creating views shows you know how to build layered architecture for BI tools (Power BI, Tableau, etc.)
+
+CREATE OR REPLACE VIEW analytics.vw_monthly_revenue AS
+SELECT
+    d.year,
+    d.month,
+    d.month_name,
+    ROUND(SUM(f.total_amount), 2) AS monthly_revenue
+FROM analytics.fact_sales f
+JOIN analytics.dim_date d ON f.order_date = d.full_date
+GROUP BY d.year, d.month, d.month_name
+ORDER BY d.year, d.month;
+
+// practice queries 
+
+// revenues by weekdays and weekend 
+
+SELECT
+    d.day_type,
+    ROUND(SUM(f.total_amount), 2) AS total_revenue,
+    COUNT(DISTINCT f.order_id) AS total_orders
+FROM analytics.fact_sales f
+JOIN analytics.dim_date d 
+    ON CAST(f.order_date AS DATE) = d.full_date
+GROUP BY d.day_type
+ORDER BY total_revenue DESC;
+
+// Revenue by city and country
+
+SELECT
+    c.country,
+    c.city,
+    ROUND(SUM(f.total_amount), 2) AS revenue
+FROM analytics.fact_sales f
+JOIN analytics.dim_customer c
+    ON f.customer_id = c.customer_id
+GROUP BY c.country, c.city
+ORDER BY  c.country , revenue DESC;
+
+// Average order value per customer
+
+select 
+     c.first_name || ' ' ||c.last_name as full_name,
+     count(f.order_id) as total_orders,
+     sum(f.total_amount)/total_ordrs as avg_order_value
+from analytics.fact_sales f 
+join analytics.dim_customer c
+on f.customer_id = c.customer_id
+group by full_name , total_orders
+order by avg_order_value desc;
+
+SELECT 
+    c.first_name || ' ' || c.last_name AS full_name,
+    COUNT(f.order_id) AS total_orders,
+    ROUND(SUM(f.total_amount) / NULLIf(COUNT(f.order_id), 0), 2) AS avg_order_value
+FROM analytics.fact_sales f 
+JOIN analytics.dim_customer c
+    ON f.customer_id = c.customer_id
+GROUP BY c.first_name, c.last_name
+ORDER BY avg_order_value DESC;
+
+// % revenue share per category
+
+select
+     round(sum(f.total_amount), 2) as Total_sales,
+     d.category,
+     round(sum(f.total_amount) * 100/sum(sum(f.total_amount)) over () ,2) as total_revenue
+from analytics.fact_sales f 
+join analytics.dim_product d
+on f.product_id = d.product_id
+group by d.category
+order by Total_sales, total_revenue desc;
+
+// Project day 4 : 📅 Day 4: Performance Tuning in Snowflake
+// 🔹 STEP 1: Understand Micro-Partitioning (Auto Behavior)
+
+SELECT
+    table_name,
+    clustering_key,
+    row_count,
+    bytes,
+    table_type
+FROM SNOWFLAKE.ACCOUNT_USAGE.TABLES
+WHERE table_schema = 'ANALYTICS'
+  AND table_name = 'FACT_SALES';
+
+// 💡 Why run this? You’d run this to: See how big your table is 🧱 Check if it’s clustered for performance 🚀 Know how many rows it has 📊 Understand the storage usage 🧠
+
+// 🔹 STEP 2: Use SYSTEM$CLUSTERING_INFORMATION for Skew Check
+SELECT SYSTEM$CLUSTERING_INFORMATION('ANALYTICS.FACT_SALES');
+
+// Why? When you frequently query/filter by product_id or customer_id, clustering improves performance.
+
+CREATE OR REPLACE TABLE analytics.fact_sales_clustered
+CLUSTER BY (product_id, customer_id) AS
+SELECT * FROM analytics.fact_sales;
 
 
 
+SELECT SYSTEM$CLUSTERING_INFORMATION('ANALYTICS.FACT_SALES_CLUSTERED');
 
-
-
-
-
-
+//📌 Real-world tip: Don’t over-cluster; it’s only worth it on large tables (millions+ rows).
 
 
 
